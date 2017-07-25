@@ -15,10 +15,18 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('data_root', 'data/data', "Location of the unzipped data file.")
 flags.DEFINE_integer('epochs', 7, "The number of epochs.")
 flags.DEFINE_bool('augmentation_flip_images', True, "If True, generate additional training data by flipping images.")
+flags.DEFINE_bool('augmentation_multiple_cameras', True, "If True, use left and right camera images in addition to the center camera.")
+flags.DEFINE_bool("camera_correction", 0.2, "If augmentation_multiple_cameras, then adjust the non-center cameras by this amount.")
 flags.DEFINE_integer('max_images', -1, "If positive, the maximum number of images to use. Used for quick iteration.")
 
 def flip_images(img, steering):
     return np.fliplr(img), -float(steering)    
+
+def left_steering_adjusted(steering_center):
+    return float(steering_center) + FLAGS.camera_correction
+
+def right_steering_adjusted(steering_center):
+    return float(steering_center) - FLAGS.camera_correction
 
 def read_dataset(data_root=FLAGS.data_root):
     read_image = lambda fname : misc.imread(os.path.join(data_root, fname.strip()))
@@ -40,12 +48,14 @@ def read_dataset(data_root=FLAGS.data_root):
             # TODO: left and right as well.
             # yield (left, center, right) (row['steering'], row['throttle'], row['brake'], row['speed'])
             yield center, row['steering']
-            yield left, row['steering']
-            yield right, row['steering']
+            if FLAGS.augmentation_multiple_cameras:
+                yield left, left_steering_adjusted(row['steering'])
+                yield right, right_steering_adjusted(row['steering'])
             if FLAGS.augmentation_flip_images:
                 yield flip_images(center, row['steering'])
-                yield flip_images(left, row['steering'])
-                yield flip_images(right, row['steering'])
+                if FLAGS.augmentation_multiple_cameras:
+                    yield flip_images(left, left_steering_adjusted(row['steering']))
+                    yield flip_images(right, right_steering_adjusted(row['steering']))
 
 def load_data():
     images = []
@@ -88,6 +98,8 @@ def lenet():
     model.compile(loss="mse", optimizer="adam")
     model.fit(X_train, y_train, validation_split=0.2, shuffle=True, nb_epoch=FLAGS.epochs)
     model_name = 'lenet_aug_model.h5' if FLAGS.augmentation_flip_images else 'lenet_model.h5'
+    if FLAGS.augmentation_multiple_cameras:
+        model_name = "mc_" + model_name
     print('Saving to:', model_name)
     model.save(model_name)
 
