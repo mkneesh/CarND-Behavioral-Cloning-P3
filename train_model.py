@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 from scipy import misc
 
-from keras.layers import Input, Flatten, Dense, Lambda, Convolution2D, MaxPooling2D
+from keras.layers import Input, Flatten, Dense, Lambda, Convolution2D, MaxPooling2D, Cropping2D
 from keras.models import Model, Sequential
 
 flags = tf.app.flags
@@ -46,7 +46,6 @@ def read_dataset(data_root=FLAGS.data_root):
             if FLAGS.max_images > 0 and i >= FLAGS.max_images:
                 return
             # TODO: left and right as well.
-            # yield (left, center, right) (row['steering'], row['throttle'], row['brake'], row['speed'])
             yield center, row['steering']
             if FLAGS.augmentation_multiple_cameras:
                 yield left, left_steering_adjusted(row['steering'])
@@ -73,6 +72,7 @@ def simple_ffn():
     print('Building model')
     model = Sequential()
     model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
+    model.add(Cropping2D(cropping=((70, 25),(0,0))))
     model.add(Flatten())
     model.add(Dense(1))
 
@@ -97,7 +97,9 @@ def lenet():
     
     model.compile(loss="mse", optimizer="adam")
     model.fit(X_train, y_train, validation_split=0.2, shuffle=True, nb_epoch=FLAGS.epochs)
-    model_name = 'lenet_aug_model.h5' if FLAGS.augmentation_flip_images else 'lenet_model.h5'
+    model_name = 'lenet.h5'
+    if FLAGS.augmentation_flip_images:
+        model_name = "aug_" + model_name
     if FLAGS.augmentation_multiple_cameras:
         model_name = "mc_" + model_name
     print('Saving to:', model_name)
